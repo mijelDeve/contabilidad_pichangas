@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase';
 import { Profile } from '@/types';
@@ -24,51 +24,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
   const supabase = createClient();
+  const mountedRef = useRef(true);
+
+  const fetchProfile = async (userId: string) => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    
+    if (mountedRef.current && data) {
+      setProfile(data as Profile);
+    }
+  };
 
   useEffect(() => {
-    const getUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+    mountedRef.current = true;
+
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
         
-        if (profileData) {
-          setProfile(profileData as Profile);
+        if (mountedRef.current) {
+          if (session?.user) {
+            setUser(session.user);
+            await fetchProfile(session.user.id);
+          }
+          setLoading(false);
+          setInitializing(false);
+        }
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: Session | null) => {
+          if (!mountedRef.current) return;
+
+          if (session?.user) {
+            setUser(session.user);
+            await fetchProfile(session.user.id);
+          } else {
+            setUser(null);
+            setProfile(null);
+          }
+          
+          setLoading(false);
+          setInitializing(false);
+        });
+
+        return () => {
+          subscription.unsubscribe();
+        };
+      } catch (error) {
+        if (mountedRef.current) {
+          setLoading(false);
+          setInitializing(false);
         }
       }
-      
-      setLoading(false);
     };
 
-    getUser();
+    initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: Session | null) => {
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (profileData) {
-          setProfile(profileData as Profile);
-        }
-      } else {
-        setProfile(null);
-      }
-      
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -82,15 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (data.user) {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', data.user.id)
-        .single();
-      
-      if (profileData) {
-        setProfile(profileData as Profile);
-      }
+      await fetchProfile(data.user.id);
     }
 
     return { error: null };
@@ -130,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading: initializing || loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
