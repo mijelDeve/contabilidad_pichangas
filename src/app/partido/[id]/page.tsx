@@ -84,14 +84,27 @@ export default function PartidoPage() {
   const buscarUsuarios = async () => {
     if (!busqueda.trim()) return;
     setBuscando(true);
-    const { data } = await supabase
+    
+    const searchTerm = busqueda.trim().toLowerCase();
+    
+    const { data: byUsername } = await supabase
       .from('profiles')
       .select('id, username, avatar_url')
-      .ilike('username', `%${busqueda}%`)
+      .ilike('username', `%${searchTerm}%`)
       .neq('id', user?.id)
       .limit(10);
+
+    const { data: byEmail } = await supabase
+      .from('profiles')
+      .select('id, username, avatar_url')
+      .ilike('email', `%${searchTerm}%`)
+      .neq('id', user?.id)
+      .limit(10);
+
+    const combined = [...(byUsername || []), ...(byEmail || [])];
+    const unique = combined.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
     
-    setResultadosBusqueda(data || []);
+    setResultadosBusqueda(unique.slice(0, 15));
     setBuscando(false);
   };
 
@@ -488,16 +501,26 @@ export default function PartidoPage() {
                   jugadoresSinEquipo.map(j => (
                     <div key={j.id} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-yellow-300 dark:border-yellow-700 rounded-lg p-2">
                       <span className="text-gray-900 dark:text-white text-sm">{j.usuario?.username}</span>
-                      <button
-                        onClick={async () => {
-                          const siguienteEquipo = jugadoresEquipoA.length <= jugadoresEquipoB.length ? 'a' : 'b';
-                          await supabase.from('partido_jugadores').update({ equipo: siguienteEquipo }).eq('id', j.id);
-                          loadPartido();
-                        }}
-                        className="text-xs text-green-600 dark:text-green-400 hover:underline"
-                      >
-                        Asignar a {jugadoresEquipoA.length <= jugadoresEquipoB.length ? 'A' : 'B'}
-                      </button>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={async () => {
+                            await supabase.from('partido_jugadores').update({ equipo: 'a' }).eq('id', j.id);
+                            loadPartido();
+                          }}
+                          className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-800 rounded font-medium"
+                        >
+                          Equipo A
+                        </button>
+                        <button
+                          onClick={async () => {
+                            await supabase.from('partido_jugadores').update({ equipo: 'b' }).eq('id', j.id);
+                            loadPartido();
+                          }}
+                          className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 rounded font-medium"
+                        >
+                          Equipo B
+                        </button>
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -524,9 +547,22 @@ export default function PartidoPage() {
                         </div>
                         <span className="text-gray-900 dark:text-white text-sm">{j.usuario?.username}</span>
                       </div>
-                      {j.rol === 'creador' && (
-                        <span className="text-xs bg-green-200 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded">Creador</span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {j.rol === 'creador' && (
+                          <span className="text-xs bg-green-200 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded">Creador</span>
+                        )}
+                        {esCreador && j.rol !== 'creador' && (
+                          <button
+                            onClick={async () => {
+                              await supabase.from('partido_jugadores').update({ equipo: null }).eq('id', j.id);
+                              loadPartido();
+                            }}
+                            className="text-xs text-red-600 dark:text-red-400 hover:underline"
+                          >
+                            Quitar
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -546,9 +582,22 @@ export default function PartidoPage() {
                         </div>
                         <span className="text-gray-900 dark:text-white text-sm">{j.usuario?.username}</span>
                       </div>
-                      {j.rol === 'creador' && (
-                        <span className="text-xs bg-blue-200 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-1 rounded">Creador</span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {j.rol === 'creador' && (
+                          <span className="text-xs bg-blue-200 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-1 rounded">Creador</span>
+                        )}
+                        {esCreador && j.rol !== 'creador' && (
+                          <button
+                            onClick={async () => {
+                              await supabase.from('partido_jugadores').update({ equipo: null }).eq('id', j.id);
+                              loadPartido();
+                            }}
+                            className="text-xs text-red-600 dark:text-red-400 hover:underline"
+                          >
+                            Quitar
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

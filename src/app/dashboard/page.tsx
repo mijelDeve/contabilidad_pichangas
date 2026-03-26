@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/components/AuthProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { NotificationBell } from '@/components/NotificationBell';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
@@ -133,6 +134,7 @@ export default function DashboardPage() {
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-green-600 dark:text-green-400">Pichangas</h1>
           <div className="flex items-center gap-4">
+            {user && <NotificationBell userId={user.id} />}
             <ThemeToggle />
             <button
               onClick={handleSignOut}
