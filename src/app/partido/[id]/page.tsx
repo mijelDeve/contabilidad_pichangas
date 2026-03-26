@@ -94,19 +94,9 @@ export default function PartidoPage() {
       .select('id, username, avatar_url')
       .ilike('username', `%${searchTerm}%`)
       .neq('id', user?.id)
-      .limit(10);
+      .limit(15);
 
-    const { data: byEmail } = await supabase
-      .from('profiles')
-      .select('id, username, avatar_url')
-      .ilike('email', `%${searchTerm}%`)
-      .neq('id', user?.id)
-      .limit(10);
-
-    const combined = [...(byUsername || []), ...(byEmail || [])];
-    const unique = combined.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
-    
-    setResultadosBusqueda(unique.slice(0, 15));
+    setResultadosBusqueda(byUsername || []);
     setBuscando(false);
   };
 
