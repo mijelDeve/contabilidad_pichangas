@@ -104,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         data: {
           username,
         },
+        emailRedirectTo: 'https://contabilidad-pichangas.vercel.app/dashboard',
       },
     });
 

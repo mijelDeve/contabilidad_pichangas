@@ -134,19 +134,22 @@ export default function NuevoPartidoPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               <Users className="w-4 h-4 inline mr-1" />
-              Máximo de Jugadores
+              Total de Jugadores
             </label>
-            <select
+            <input
+              type="number"
               value={maxJugadores}
               onChange={(e) => setMaxJugadores(Number(e.target.value))}
+              min={2}
+              max={50}
               className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              <option value={6}>6 jugadores (Fútbol 3)</option>
-              <option value={8}>8 jugadores (Fútbol 5)</option>
-              <option value={10}>10 jugadores (Fútbol 7)</option>
-              <option value={14}>14 jugadores (Fútbol 9)</option>
-              <option value={22}>22 jugadores (Fútbol 11)</option>
-            </select>
+              required
+            />
+            {maxJugadores >= 2 && (
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                Formato: <span className="font-semibold text-green-600 dark:text-green-400">{Math.floor(maxJugadores / 2)} vs {Math.ceil(maxJugadores / 2)}</span>
+              </p>
+            )}
           </div>
 
           <button
