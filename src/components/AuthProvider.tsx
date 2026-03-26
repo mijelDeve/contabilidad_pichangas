@@ -5,16 +5,12 @@ import { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase';
 import { Profile } from '@/types';
 
-interface AuthError {
-  message: string;
-}
-
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signUp: (email: string, password: string, username: string) => Promise<{ error: AuthError | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: { message: string } | null }>;
+  signUp: (email: string, password: string, username: string) => Promise<{ error: { message: string } | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -24,9 +20,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [initializing, setInitializing] = useState(true);
   const supabase = createClient();
-  const mountedRef = useRef(true);
+  const initializedRef = useRef(false);
 
   const fetchProfile = async (userId: string) => {
     const { data } = await supabase
@@ -35,58 +30,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('id', userId)
       .single();
     
-    if (mountedRef.current && data) {
+    if (data) {
       setProfile(data as Profile);
     }
   };
 
   useEffect(() => {
-    mountedRef.current = true;
-
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (mountedRef.current) {
-          if (session?.user) {
-            setUser(session.user);
-            await fetchProfile(session.user.id);
+        if (error) {
+          if (error.name === 'AuthTokenRefreshError') {
+            await supabase.auth.signOut();
           }
           setLoading(false);
-          setInitializing(false);
+          return;
         }
+        
+        if (session?.user) {
+          setUser(session.user);
+          await fetchProfile(session.user.id);
+        }
+        setLoading(false);
+        initializedRef.current = true;
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: Session | null) => {
-          if (!mountedRef.current) return;
-
-          if (session?.user) {
+          if (event === 'TOKEN_REFRESHED' && session?.user) {
             setUser(session.user);
             await fetchProfile(session.user.id);
-          } else {
+          } else if (event === 'SIGNED_OUT' || !session) {
             setUser(null);
             setProfile(null);
+          } else if (event === 'SIGNED_IN' && session?.user) {
+            setUser(session.user);
+            await fetchProfile(session.user.id);
           }
           
           setLoading(false);
-          setInitializing(false);
         });
 
         return () => {
           subscription.unsubscribe();
         };
       } catch (error) {
-        if (mountedRef.current) {
-          setLoading(false);
-          setInitializing(false);
-        }
+        console.error('Auth initialization error:', error);
+        setLoading(false);
       }
     };
 
     initAuth();
-
-    return () => {
-      mountedRef.current = false;
-    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -140,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading: initializing || loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );
@@ -149,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth must be used within a AuthProvider');
   }
   return context;
 }
