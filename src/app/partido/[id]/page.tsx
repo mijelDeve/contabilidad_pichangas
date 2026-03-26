@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Partido, Profile, PartidoJugador, Invitacion, Gol, VotoMvp } from '@/types';
-import { ArrowLeft, Users, Calendar, Clock, Plus, Trophy, Send, Star, X, Check } from 'lucide-react';
+import { ArrowLeft, Users, Calendar, Clock, Plus, Trophy, Send, Star, X, Check, Shuffle, RefreshCw } from 'lucide-react';
 
 interface PartidoDetalle extends Partido {
   creador?: Profile;
@@ -30,6 +30,8 @@ export default function PartidoPage() {
   const [mostrarInvitacion, setMostrarInvitacion] = useState(false);
   const [equipoSeleccionado, setEquipoSeleccionado] = useState<'a' | 'b' | null>(null);
   const [minutoActual, setMinutoActual] = useState(0);
+  const [equiposGenerados, setEquiposGenerados] = useState(false);
+  const [generandoEquipos, setGenerandoEquipos] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -51,7 +53,7 @@ export default function PartidoPage() {
         creador:profiles!partidos_creador_id_fkey(id, username, avatar_url),
         partido_jugadores(
           *,
-          usuario:profiles!partido_jugadores_usuario_id_fkey(id, username, avatar_url)
+          usuario:profiles!partido_jugadores_usuario_id_fkey(id, username, avatar_url, rating)
         ),
         invitaciones(
           *,
@@ -234,6 +236,128 @@ export default function PartidoPage() {
       });
     }
     loadPartido();
+  };
+
+  // Función para generar equipos con Draft Alternado (balanceado por rating)
+  const generarEquiposDraftAlternado = async () => {
+    if (!partido || !esCreador) return;
+    
+    setGenerandoEquipos(true);
+    
+    // Obtener jugadores sin equipo con sus ratings
+    const jugadoresSinEquipoConRating = partido.partido_jugadores
+      ?.filter(j => j.usuario && !j.equipo && j.usuario.rating)
+      .map(j => ({
+        id: j.id,
+        usuarioId: j.usuario_id!,
+        username: j.usuario!.username,
+        rating: j.usuario!.rating || 50
+      })) || [];
+
+    if (jugadoresSinEquipoConRating.length < 2) {
+      setGenerandoEquipos(false);
+      return;
+    }
+
+    // Ordenar por rating (mayor a menor)
+    const ordenados = [...jugadoresSinEquipoConRating].sort((a, b) => b.rating - a.rating);
+
+    // Asignar alternadamente: A, B, B, A, A, B...
+    const updates: { id: string; equipo: 'a' | 'b' }[] = [];
+    
+    ordenados.forEach((jugador, index) => {
+      // Patrón: A, B, B, A, A, B... (para balancear equipos)
+      const pattern = index % 4;
+      const equipo = (pattern === 0 || pattern === 3) ? 'a' : 'b';
+      updates.push({ id: jugador.id, equipo });
+    });
+
+    // Actualizar todos los equipos en paralelo
+    await Promise.all(updates.map(u => 
+      supabase.from('partido_jugadores').update({ equipo: u.equipo }).eq('id', u.id)
+    ));
+
+    setEquiposGenerados(true);
+    setGenerandoEquipos(false);
+    loadPartido();
+  };
+
+  // Función para generar equipos por Niveles (top 50% vs bottom 50%)
+  const generarEquiposPorNiveles = async () => {
+    if (!partido || !esCreador) return;
+    
+    setGenerandoEquipos(true);
+    
+    // Obtener jugadores sin equipo con sus ratings
+    const jugadoresSinEquipoConRating = partido.partido_jugadores
+      ?.filter(j => j.usuario && !j.equipo && j.usuario.rating)
+      .map(j => ({
+        id: j.id,
+        usuarioId: j.usuario_id!,
+        username: j.usuario!.username,
+        rating: j.usuario!.rating || 50
+      })) || [];
+
+    if (jugadoresSinEquipoConRating.length < 2) {
+      setGenerandoEquipos(false);
+      return;
+    }
+
+    // Ordenar por rating
+    const ordenados = [...jugadoresSinEquipoConRating].sort((a, b) => b.rating - a.rating);
+
+    // Separar en dos grupos: top 50% y bottom 50%
+    const mid = Math.floor(ordenados.length / 2);
+    const topHalf = ordenados.slice(0, mid);
+    const bottomHalf = ordenados.slice(mid);
+
+    // Shuffle cada grupo
+    const shuffle = (arr: typeof topHalf) => arr.sort(() => Math.random() - 0.5);
+    const topShuffled = shuffle([...topHalf]);
+    const bottomShuffled = shuffle([...bottomHalf]);
+
+    // Asignar: mitad de cada grupo a cada equipo
+    const updates: { id: string; equipo: 'a' | 'b' }[] = [];
+    
+    // Equipo A: primera mitad del top + primera mitad del bottom
+    for (let i = 0; i < Math.ceil(topShuffled.length / 2); i++) {
+      updates.push({ id: topShuffled[i].id, equipo: 'a' });
+    }
+    for (let i = 0; i < Math.ceil(bottomShuffled.length / 2); i++) {
+      updates.push({ id: bottomShuffled[i].id, equipo: 'a' });
+    }
+    
+    // Equipo B: resto
+    for (let i = Math.ceil(topShuffled.length / 2); i < topShuffled.length; i++) {
+      updates.push({ id: topShuffled[i].id, equipo: 'b' });
+    }
+    for (let i = Math.ceil(bottomShuffled.length / 2); i < bottomShuffled.length; i++) {
+      updates.push({ id: bottomShuffled[i].id, equipo: 'b' });
+    }
+
+    // Actualizar todos los equipos en paralelo
+    await Promise.all(updates.map(u => 
+      supabase.from('partido_jugadores').update({ equipo: u.equipo }).eq('id', u.id)
+    ));
+
+    setEquiposGenerados(true);
+    setGenerandoEquipos(false);
+    loadPartido();
+  };
+
+  // Función para resetear equipos y generar de nuevo (para modo Por Niveles)
+  const resetearYRegenerarEquipos = async () => {
+    if (!partido || !esCreador) return;
+    
+    // Primero resetear todos los jugadores sin equipo
+    const jugadoresSinEquipo = partido.partido_jugadores?.filter(j => j.usuario && !j.equipo) || [];
+    
+    await Promise.all(jugadoresSinEquipo.map(j => 
+      supabase.from('partido_jugadores').update({ equipo: null }).eq('id', j.id)
+    ));
+
+    // Luego generar nuevos equipos por niveles
+    await generarEquiposPorNiveles();
   };
 
   const esCreador = partido?.creador_id === user?.id;
@@ -535,6 +659,43 @@ export default function PartidoPage() {
                     </button>
                   ))}
                 </div>
+              )}
+            </div>
+          )}
+
+          {jugadoresSinEquipo.length > 1 && esCreador && (
+            <div className="mb-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+              <p className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-3">Generar Equipos Balanceados:</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={generarEquiposDraftAlternado}
+                  disabled={generandoEquipos}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-lg font-medium text-sm"
+                >
+                  <Shuffle className="w-4 h-4" />
+                  Draft Alternado
+                </button>
+                <button
+                  onClick={generarEquiposPorNiveles}
+                  disabled={generandoEquipos}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg font-medium text-sm"
+                >
+                  <Users className="w-4 h-4" />
+                  Por Niveles
+                </button>
+                {equiposGenerados && (
+                  <button
+                    onClick={resetearYRegenerarEquipos}
+                    disabled={generandoEquipos}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium text-sm"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Regenerar
+                  </button>
+                )}
+              </div>
+              {generandoEquipos && (
+                <p className="text-xs text-purple-600 dark:text-purple-400 mt-2">Generando equipos...</p>
               )}
             </div>
           )}
