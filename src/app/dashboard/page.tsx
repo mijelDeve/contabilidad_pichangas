@@ -80,12 +80,14 @@ export default function DashboardPage() {
     setLoadingData(false);
   }, [user, supabase]);
 
+  // Redirect to login only after auth is fully loaded and there's no user
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
     }
-  }, [user, loading, router]);
+  }, [loading, user, router]);
 
+  // Load data when user is available and auth is not loading
   useEffect(() => {
     if (user && !loading) {
       loadData();
@@ -126,7 +128,8 @@ export default function DashboardPage() {
     router.push('/login');
   };
 
-  if (loading || loadingData) {
+  // Show loading spinner while auth is loading
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-600 border-t-transparent"></div>
@@ -134,8 +137,18 @@ export default function DashboardPage() {
     );
   }
 
+  // Don't render anything if no user (will redirect)
   if (!user) {
     return null;
+  }
+
+  // Show data loading spinner
+  if (loadingData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-600 border-t-transparent"></div>
+      </div>
+    );
   }
 
   return (

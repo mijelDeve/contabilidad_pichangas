@@ -20,6 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -40,9 +41,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (data) setProfile(data as Profile);
           }
           setLoading(false);
+          setIsInitialized(true);
         }
       } catch (error) {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+          setIsInitialized(true);
+        }
       }
     };
 
@@ -51,7 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: Session | null) => {
       if (!isMounted) return;
 
-      if (event === 'SIGNED_OUT' || !session) {
+      // Only handle SIGNED_IN and SIGNED_OUT events, ignore token refreshes
+      if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
         setUser(null);
         setProfile(null);
         setLoading(false);
@@ -66,6 +72,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
     };
   }, [supabase]);
+
+  // Handle visibility change - check session when tab becomes visible
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        // Check if we still have a valid session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session && user) {
+          // Session expired, user needs to log in again
+          setUser(null);
+          setProfile(null);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isInitialized, user, supabase]);
 
   const signIn = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
