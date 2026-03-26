@@ -4,7 +4,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { NotificationBell } from '@/components/NotificationBell';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Partido, Invitacion, Profile } from '@/types';
 import { Plus, Calendar, Users, LogOut, Trophy, Clock, User } from 'lucide-react';
@@ -20,6 +20,7 @@ export default function DashboardPage() {
   const [partidos, setPartidos] = useState<PartidoWithCreador[]>([]);
   const [invitaciones, setInvitaciones] = useState<(Invitacion & { partido?: Partido; de_usuario?: Profile })[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -80,19 +81,31 @@ export default function DashboardPage() {
     setLoadingData(false);
   }, [user, supabase]);
 
-  // Redirect to login only after auth is fully loaded and there's no user
+  // Grace period before redirect - prevents redirect on tab switch
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
+    // Clear any pending redirect
+    if (redirectTimeoutRef.current) {
+      clearTimeout(redirectTimeoutRef.current);
     }
-  }, [loading, user, router]);
 
-  // Load data when user is available and auth is not loading
-  useEffect(() => {
-    if (user && !loading) {
-      loadData();
+    // Only redirect after auth has loaded AND user is null for a sustained period
+    if (!loading) {
+      if (!user) {
+        // Wait 500ms to confirm user is really not logged in
+        redirectTimeoutRef.current = setTimeout(() => {
+          router.push('/login');
+        }, 500);
+      } else {
+        loadData();
+      }
     }
-  }, [user, loading, loadData]);
+
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, [loading, user, router, loadData]);
 
   const aceptarInvitacion = async (invitacionId: string) => {
     const partidoId = invitaciones.find(i => i.id === invitacionId)?.partido_id;
@@ -137,13 +150,17 @@ export default function DashboardPage() {
     );
   }
 
-  // Don't render anything if no user (will redirect)
-  if (!user) {
-    return null;
+  // Show data loading spinner (but keep user visible if already logged in)
+  if (loadingData && user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-600 border-t-transparent"></div>
+      </div>
+    );
   }
 
-  // Show data loading spinner
-  if (loadingData) {
+  // Don't render anything if no user (will redirect after grace period)
+  if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-600 border-t-transparent"></div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase';
 import { Profile } from '@/types';
@@ -20,8 +20,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isInitialized, setIsInitialized] = useState(false);
   const supabase = createClient();
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -30,23 +30,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
+        if (isMounted && session?.user) {
+          setUser(session.user);
+          const { data } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+          if (data) setProfile(data as Profile);
+        }
+        
         if (isMounted) {
-          if (session?.user) {
-            setUser(session.user);
-            const { data } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
-            if (data) setProfile(data as Profile);
-          }
           setLoading(false);
-          setIsInitialized(true);
+          hasLoadedRef.current = true;
         }
       } catch (error) {
         if (isMounted) {
           setLoading(false);
-          setIsInitialized(true);
+          hasLoadedRef.current = true;
         }
       }
     };
@@ -54,16 +55,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: Session | null) => {
-      if (!isMounted) return;
+      if (!isMounted || !hasLoadedRef.current) return;
 
-      // Only handle SIGNED_IN and SIGNED_OUT events, ignore token refreshes
-      if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+      // Ignore token refresh events - they don't mean user is logged out
+      if (event === 'TOKEN_REFRESHED') {
+        return;
+      }
+
+      if (event === 'SIGNED_OUT' || !session) {
         setUser(null);
         setProfile(null);
-        setLoading(false);
       } else if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user);
-        setLoading(false);
+        // Fetch profile on sign in
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+          .then(({ data: profileData }: { data: Profile | null }) => {
+            if (profileData && isMounted) setProfile(profileData);
+          });
       }
     });
 
@@ -72,26 +84,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
     };
   }, [supabase]);
-
-  // Handle visibility change - check session when tab becomes visible
-  useEffect(() => {
-    if (!isInitialized) return;
-
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        // Check if we still have a valid session
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session && user) {
-          // Session expired, user needs to log in again
-          setUser(null);
-          setProfile(null);
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isInitialized, user, supabase]);
 
   const signIn = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
