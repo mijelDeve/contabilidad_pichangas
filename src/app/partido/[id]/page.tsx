@@ -55,17 +55,17 @@ export default function PartidoPage() {
         ),
         invitaciones(
           *,
-          de_usuario:profiles!invitaciones_de_usuario_id_fkey(id, username, avatar_url),
-          para_usuario:profiles!invitaciones_para_usuario_id_fkey(id, username, avatar_url)
+          de_usuario:profiles!invitaciones_de_usuario_id_fkey(id, username, avatar_url, rating),
+          para_usuario:profiles!invitaciones_para_usuario_id_fkey(id, username, avatar_url, rating)
         ),
         goles(
           *,
-          jugador:profiles!goles_jugador_id_fkey(id, username, avatar_url)
+          jugador:profiles!goles_jugador_id_fkey(id, username, avatar_url, rating)
         ),
         votos_mvp(
           *,
-          votante:profiles!votos_mvp_votante_id_fkey(id, username, avatar_url),
-          mvp:profiles!votos_mvp_mvp_id_fkey(id, username, avatar_url)
+          votante:profiles!votos_mvp_votante_id_fkey(id, username, avatar_url, rating),
+          mvp:profiles!votos_mvp_mvp_id_fkey(id, username, avatar_url, rating)
         )
       `)
       .eq('id', params.id)
@@ -154,6 +154,11 @@ export default function PartidoPage() {
 
   const registrarResultado = async (equipoA: number, equipoB: number) => {
     if (!partido) return;
+    
+    const ganoA = equipoA > equipoB;
+    const ganoB = equipoB > equipoA;
+    const empato = equipoA === equipoB;
+    
     await supabase
       .from('partidos')
       .update({ 
@@ -162,6 +167,47 @@ export default function PartidoPage() {
         estado: 'finalizado'
       })
       .eq('id', partido.id);
+
+    const todosJugadores = [...jugadoresEquipoA, ...jugadoresEquipoB];
+    
+    for (const jugador of todosJugadores) {
+      const esEquipoA = jugador.equipo === 'a';
+      const gano = esEquipoA ? ganoA : ganoB;
+      
+      const { data: perfil } = await supabase
+        .from('profiles')
+        .select('rating')
+        .eq('id', jugador.usuario_id)
+        .single();
+      
+      if (perfil) {
+        let nuevoRating = perfil.rating;
+        
+        if (gano) nuevoRating += 2;
+        else if (!empato) nuevoRating -= 1;
+        
+        const mvpDelPartido = partido.mvp_id === jugador.usuario_id;
+        if (mvpDelPartido) nuevoRating += 3;
+        
+        const misGoles = partido.goles?.filter(g => g.jugador_id === jugador.usuario_id).length || 0;
+        nuevoRating += misGoles * 0.5;
+        
+        nuevoRating = Math.max(40, Math.min(99, nuevoRating));
+        
+        await supabase
+          .from('profiles')
+          .update({ rating: nuevoRating })
+          .eq('id', jugador.usuario_id);
+        
+        await supabase.from('ratings_historico').insert({
+          usuario_id: jugador.usuario_id,
+          rating: nuevoRating,
+          motivo: mvpDelPartido ? 'partido_mvp' : 'partido',
+          partido_id: partido.id
+        });
+      }
+    }
+    
     loadPartido();
   };
 
@@ -546,6 +592,9 @@ export default function PartidoPage() {
                           <span className="text-green-700 dark:text-green-400 text-xs font-bold">{j.usuario?.username?.charAt(0).toUpperCase()}</span>
                         </div>
                         <span className="text-gray-900 dark:text-white text-sm">{j.usuario?.username}</span>
+                        {j.usuario?.rating && (
+                          <span className="text-xs text-yellow-600 dark:text-yellow-400">⭐{j.usuario.rating}</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         {j.rol === 'creador' && (
@@ -581,6 +630,9 @@ export default function PartidoPage() {
                           <span className="text-blue-700 dark:text-blue-400 text-xs font-bold">{j.usuario?.username?.charAt(0).toUpperCase()}</span>
                         </div>
                         <span className="text-gray-900 dark:text-white text-sm">{j.usuario?.username}</span>
+                        {j.usuario?.rating && (
+                          <span className="text-xs text-yellow-600 dark:text-yellow-400">⭐{j.usuario.rating}</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         {j.rol === 'creador' && (

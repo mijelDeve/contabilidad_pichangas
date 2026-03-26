@@ -157,7 +157,14 @@ export default function DashboardPage() {
             </div>
           )}
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Hola, {profile?.username}</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Hola, {profile?.username}</h2>
+              {profile?.rating && (
+                <span className="px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-sm font-bold rounded">
+                  ⭐ {profile.rating}
+                </span>
+              )}
+            </div>
             <p className="text-gray-500 dark:text-gray-400">¿Qué vamos a jugar hoy?</p>
           </div>
         </div>

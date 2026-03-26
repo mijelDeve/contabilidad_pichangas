@@ -5,6 +5,8 @@ export interface Profile {
   id: string;
   username: string;
   avatar_url: string | null;
+  rating: number;
+  rating_inicial: number | null;
   created_at: string;
 }
 
