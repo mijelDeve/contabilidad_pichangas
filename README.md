@@ -55,8 +55,8 @@
 
 ### Prerrequisitos
 
-- Node.js 18+ (o superior)
-- npm o yarn
+- **Node.js**: v18+ (probado con v23.11.1)
+- **npm**: v9+ (probado con v10.9.2)
 - Cuenta de Supabase (gratuita)
 
 ### Pasos de Instalación
