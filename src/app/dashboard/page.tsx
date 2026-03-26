@@ -169,13 +169,20 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <button
             onClick={() => router.push('/partido/nuevo')}
             className="flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 text-white font-semibold py-4 px-6 rounded-xl transition-colors"
           >
             <Plus className="w-6 h-6" />
             Crear Pichanga
+          </button>
+          <button
+            onClick={() => router.push('/ranking')}
+            className="flex items-center justify-center gap-3 bg-white dark:bg-gray-800 border-2 border-yellow-400 dark:border-yellow-500 hover:border-yellow-500 text-gray-700 dark:text-gray-200 font-semibold py-4 px-6 rounded-xl transition-colors"
+          >
+            <Trophy className="w-6 h-6 text-yellow-500" />
+            Ranking
           </button>
           <button
             onClick={() => router.push('/mis-estadisticas')}
