@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase';
 import { Profile } from '@/types';
@@ -21,66 +21,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
-  const initializedRef = useRef(false);
-
-  const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    
-    if (data) {
-      setProfile(data as Profile);
-    }
-  };
 
   useEffect(() => {
+    let isMounted = true;
+
     const initAuth = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { data: { session } } = await supabase.auth.getSession();
         
-        if (error) {
-          if (error.name === 'AuthTokenRefreshError') {
-            await supabase.auth.signOut();
+        if (isMounted) {
+          if (session?.user) {
+            setUser(session.user);
+            const { data } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+            if (data) setProfile(data as Profile);
           }
           setLoading(false);
-          return;
         }
-        
-        if (session?.user) {
-          setUser(session.user);
-          await fetchProfile(session.user.id);
-        }
-        setLoading(false);
-        initializedRef.current = true;
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: Session | null) => {
-          if (event === 'TOKEN_REFRESHED' && session?.user) {
-            setUser(session.user);
-            await fetchProfile(session.user.id);
-          } else if (event === 'SIGNED_OUT' || !session) {
-            setUser(null);
-            setProfile(null);
-          } else if (event === 'SIGNED_IN' && session?.user) {
-            setUser(session.user);
-            await fetchProfile(session.user.id);
-          }
-          
-          setLoading(false);
-        });
-
-        return () => {
-          subscription.unsubscribe();
-        };
       } catch (error) {
-        console.error('Auth initialization error:', error);
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     initAuth();
-  }, []);
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: Session | null) => {
+      if (!isMounted) return;
+
+      if (event === 'SIGNED_OUT' || !session) {
+        setUser(null);
+        setProfile(null);
+        setLoading(false);
+      } else if (event === 'SIGNED_IN' && session?.user) {
+        setUser(session.user);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   const signIn = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -93,7 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (data.user) {
-      await fetchProfile(data.user.id);
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+      if (profileData) setProfile(profileData as Profile);
     }
 
     return { error: null };
@@ -104,9 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       password,
       options: {
-        data: {
-          username,
-        },
+        data: { username },
         emailRedirectTo: 'https://contabilidad-pichangas.vercel.app/dashboard',
       },
     });

@@ -4,7 +4,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { NotificationBell } from '@/components/NotificationBell';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Partido, Invitacion, Profile } from '@/types';
 import { Plus, Calendar, Users, LogOut, Trophy, Clock, User } from 'lucide-react';
@@ -21,29 +21,7 @@ export default function DashboardPage() {
   const [invitaciones, setInvitaciones] = useState<(Invitacion & { partido?: Partido; de_usuario?: Profile })[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router]);
-
-  useEffect(() => {
-    if (!loading && user) {
-      loadData();
-    }
-  }, [loading, user]);
-
-  useEffect(() => {
-    if (!loading && !user) {
-      return;
-    }
-    
-    if (user && !loadingData) {
-      loadData();
-    }
-  }, [user, loading, loadingData]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!user) return;
     
     setLoadingData(true);
@@ -100,7 +78,19 @@ export default function DashboardPage() {
     }
 
     setLoadingData(false);
-  };
+  }, [user, supabase]);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
+
+  useEffect(() => {
+    if (user && !loading) {
+      loadData();
+    }
+  }, [user, loading, loadData]);
 
   const aceptarInvitacion = async (invitacionId: string) => {
     const partidoId = invitaciones.find(i => i.id === invitacionId)?.partido_id;
