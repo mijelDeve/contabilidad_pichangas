@@ -27,27 +27,31 @@ export default function DashboardPage() {
     }
   }, [user, loading, router]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
-      </div>
-    );
-  }
-
   useEffect(() => {
-    if (user) {
+    if (!loading && user) {
       loadData();
     }
-  }, [user]);
+  }, [loading, user]);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      return;
+    }
+    
+    if (user && !loadingData) {
+      loadData();
+    }
+  }, [user, loading, loadingData]);
 
   const loadData = async () => {
+    if (!user) return;
+    
     setLoadingData(true);
     
     const { data: partidoIds } = await supabase
       .from('invitaciones')
       .select('partido_id')
-      .eq('para_usuario_id', user?.id)
+      .eq('para_usuario_id', user.id)
       .eq('estado', 'aceptado');
 
     const idsFromInvitations = partidoIds?.map((i: { partido_id: string }) => i.partido_id) || [];
@@ -63,9 +67,9 @@ export default function DashboardPage() {
       .order('hora', { ascending: true });
 
     if (idsFromInvitations.length > 0) {
-      query = query.or(`creador_id.eq.${user?.id},id.in.(${idsFromInvitations.join(',')})`);
+      query = query.or(`creador_id.eq.${user.id},id.in.(${idsFromInvitations.join(',')})`);
     } else {
-      query = query.eq('creador_id', user?.id);
+      query = query.eq('creador_id', user.id);
     }
 
     const { data: partidosData } = await query;
@@ -84,7 +88,7 @@ export default function DashboardPage() {
         partido:partidos(*),
         de_usuario:profiles!invitaciones_de_usuario_id_fkey(username)
       `)
-      .eq('para_usuario_id', user?.id)
+      .eq('para_usuario_id', user.id)
       .eq('estado', 'pendiente')
       .order('created_at', { ascending: false });
 
@@ -99,17 +103,21 @@ export default function DashboardPage() {
   };
 
   const aceptarInvitacion = async (invitacionId: string) => {
+    const partidoId = invitaciones.find(i => i.id === invitacionId)?.partido_id;
+    
     await supabase
       .from('invitaciones')
       .update({ estado: 'aceptado' })
       .eq('id', invitacionId);
 
-    await supabase.from('partido_jugadores').insert({
-      partido_id: invitaciones.find(i => i.id === invitacionId)?.partido_id,
-      usuario_id: user?.id,
-      rol: 'invitado',
-      equipo: null
-    });
+    if (partidoId && user) {
+      await supabase.from('partido_jugadores').insert({
+        partido_id: partidoId,
+        usuario_id: user.id,
+        rol: 'invitado',
+        equipo: null
+      });
+    }
 
     loadData();
   };
@@ -134,6 +142,10 @@ export default function DashboardPage() {
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-green-600 border-t-transparent"></div>
       </div>
     );
+  }
+
+  if (!user) {
+    return null;
   }
 
   return (
