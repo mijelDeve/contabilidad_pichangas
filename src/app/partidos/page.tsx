@@ -107,6 +107,20 @@ export default function PartidosPage() {
   const unirseAPartido = async (partidoId: string) => {
     if (!user) return;
     
+    // Verificar si ya está unido
+    const { data: existente } = await supabase
+      .from('partido_jugadores')
+      .select('id')
+      .eq('partido_id', partidoId)
+      .eq('usuario_id', user.id)
+      .single();
+
+    if (existente) {
+      alert('Ya estás unido a este partido');
+      setUniendoId(null);
+      return;
+    }
+    
     setUniendoId(partidoId);
     
     await supabase.from('partido_jugadores').insert({
