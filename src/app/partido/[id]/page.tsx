@@ -382,6 +382,15 @@ export default function PartidoPage() {
   const jugadoresEquipoA = partido?.partido_jugadores?.filter(j => j.usuario && j.equipo === 'a') || [];
   const jugadoresEquipoB = partido?.partido_jugadores?.filter(j => j.usuario && j.equipo === 'b') || [];
   const jugadoresSinEquipo = partido?.partido_jugadores?.filter(j => j.usuario && !j.equipo) || [];
+  
+  // Calcular promedio de rating por equipo
+  const promedioEquipoA = jugadoresEquipoA.length > 0
+    ? Math.round(jugadoresEquipoA.reduce((sum, j) => sum + (j.usuario?.rating || 50), 0) / jugadoresEquipoA.length)
+    : 0;
+  const promedioEquipoB = jugadoresEquipoB.length > 0
+    ? Math.round(jugadoresEquipoB.reduce((sum, j) => sum + (j.usuario?.rating || 50), 0) / jugadoresEquipoB.length)
+    : 0;
+  
   const invitacionesPendientes = partido?.invitaciones?.filter(i => i.estado === 'pendiente') || [];
   const golesEquipoA = partido?.goles?.filter(g => g.equipo === 'a') || [];
   const golesEquipoB = partido?.goles?.filter(g => g.equipo === 'b') || [];
@@ -749,7 +758,14 @@ export default function PartidoPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <h3 className="text-sm font-medium text-green-700 dark:text-green-400 mb-2">Equipo A ({jugadoresEquipoA.length})</h3>
+              <h3 className="text-sm font-medium text-green-700 dark:text-green-400 mb-2">
+                Equipo A ({jugadoresEquipoA.length})
+                {promedioEquipoA > 0 && (
+                  <span className="ml-2 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded">
+                    ⭐ {promedioEquipoA} avg
+                  </span>
+                )}
+              </h3>
               {jugadoresEquipoA.length === 0 ? (
                 <p className="text-gray-500 dark:text-gray-400 text-sm">Sin jugadores</p>
               ) : (
@@ -798,7 +814,14 @@ export default function PartidoPage() {
               )}
             </div>
             <div>
-              <h3 className="text-sm font-medium text-blue-700 dark:text-blue-400 mb-2">Equipo B ({jugadoresEquipoB.length})</h3>
+              <h3 className="text-sm font-medium text-blue-700 dark:text-blue-400 mb-2">
+                Equipo B ({jugadoresEquipoB.length})
+                {promedioEquipoB > 0 && (
+                  <span className="ml-2 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded">
+                    ⭐ {promedioEquipoB} avg
+                  </span>
+                )}
+              </h3>
               {jugadoresEquipoB.length === 0 ? (
                 <p className="text-gray-500 dark:text-gray-400 text-sm">Sin jugadores</p>
               ) : (
