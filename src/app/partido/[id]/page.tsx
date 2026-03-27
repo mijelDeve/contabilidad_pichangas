@@ -363,11 +363,12 @@ export default function PartidoPage() {
       supabase.from('partido_jugadores').update({ equipo: null }).eq('id', j.id)
     ));
 
-    // Generar según el tipo seleccionado
-    if (tipoGeneracion === 'draft') {
-      await generarEquiposDraftAlternado();
-    } else {
+    // Generar según el tipo seleccionado, o draft por defecto
+    if (tipoGeneracion === 'niveles') {
       await generarEquiposPorNiveles();
+    } else {
+      // Por defecto usar draft alternado
+      await generarEquiposDraftAlternado();
     }
     
     setGenerandoEquipos(false);
@@ -700,7 +701,7 @@ export default function PartidoPage() {
                   <Users className="w-4 h-4" />
                   Por Niveles
                 </button>
-                {equiposGenerados && (
+                {((jugadoresEquipoA.length > 0 || jugadoresEquipoB.length > 0) && esAdmin) && (
                   <button
                     onClick={resetearYRegenerarEquipos}
                     disabled={generandoEquipos}
