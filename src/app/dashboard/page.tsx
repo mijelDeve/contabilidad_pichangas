@@ -27,6 +27,15 @@ export default function DashboardPage() {
     
     setLoadingData(true);
     
+    // Obtener partidos donde soy creador
+    const { data: idsFromCreacion } = await supabase
+      .from('partidos')
+      .select('id')
+      .eq('creador_id', user.id);
+    
+    const idsCreacion = idsFromCreacion?.map((p: { id: string }) => p.id) || [];
+    
+    // Obtener partidos donde tengo invitación aceptada
     const { data: partidoIds } = await supabase
       .from('invitaciones')
       .select('partido_id')
@@ -34,6 +43,17 @@ export default function DashboardPage() {
       .eq('estado', 'aceptado');
 
     const idsFromInvitations = partidoIds?.map((i: { partido_id: string }) => i.partido_id) || [];
+    
+    // Obtener partidos donde soy jugador (me uní directamente)
+    const { data: misPartidosJugador } = await supabase
+      .from('partido_jugadores')
+      .select('partido_id')
+      .eq('usuario_id', user.id);
+    
+    const idsFromJugador = misPartidosJugador?.map((m: { partido_id: string }) => m.partido_id) || [];
+    
+    // Combinar todos los IDs sin duplicados
+    const todosMisIds = [...new Set([...idsCreacion, ...idsFromInvitations, ...idsFromJugador])];
     
     let query = supabase
       .from('partidos')
@@ -45,8 +65,8 @@ export default function DashboardPage() {
       .order('fecha', { ascending: true })
       .order('hora', { ascending: true });
 
-    if (idsFromInvitations.length > 0) {
-      query = query.or(`creador_id.eq.${user.id},id.in.(${idsFromInvitations.join(',')})`);
+    if (todosMisIds.length > 0) {
+      query = query.or(`creador_id.eq.${user.id},id.in.(${todosMisIds.join(',')})`);
     } else {
       query = query.eq('creador_id', user.id);
     }
