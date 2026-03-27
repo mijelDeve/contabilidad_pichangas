@@ -5,7 +5,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Partido, Profile, PartidoJugador, Invitacion, Gol, VotoMvp } from '@/types';
+import { Partido, Profile, PartidoJugador, Invitacion, Gol, VotoMvp, Ranking } from '@/types';
 import { ArrowLeft, Users, Calendar, Clock, Plus, Trophy, Send, Star, X, Check, Shuffle, RefreshCw } from 'lucide-react';
 
 interface PartidoDetalle extends Partido {
@@ -14,6 +14,7 @@ interface PartidoDetalle extends Partido {
   invitaciones?: (Invitacion & { de_usuario?: Profile; para_usuario?: Profile })[];
   goles?: (Gol & { jugador?: Profile })[];
   votos_mvp?: (VotoMvp & { votante?: Profile; mvp?: Profile })[];
+  rankings?: (Ranking & { jugador_rank?: Profile })[];
 }
 
 export default function PartidoPage() {
@@ -33,6 +34,13 @@ export default function PartidoPage() {
   const [equiposGenerados, setEquiposGenerados] = useState(false);
   const [tipoGeneracion, setTipoGeneracion] = useState<'draft' | 'niveles' | null>(null);
   const [generandoEquipos, setGenerandoEquipos] = useState(false);
+  
+  // Estados para ranking
+  const [mostrarRanking, setMostrarRanking] = useState(false);
+  const [rankingPropio, setRankingPropio] = useState<string[]>([]);
+  const [rankingContrario, setRankingContrario] = useState<string[]>([]);
+  const [rankingGuardado, setRankingGuardado] = useState(false);
+  const [rankingEnviado, setRankingEnviado] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -58,6 +66,97 @@ export default function PartidoPage() {
     loadPartido();
   };
 
+  // Funciones para Ranking
+  const abrirRanking = async () => {
+    if (!user || !partido) return;
+    
+    // Obtener el equipo del usuario
+    const miRegistro = partido.partido_jugadores?.find(j => j.usuario_id === user.id);
+    const miEquipo = miRegistro?.equipo;
+    
+    // Obtener jugadores del equipo contrario
+    const equipoContrario = miEquipo === 'a' ? 'b' : 'a';
+    const jugadoresContrario = partido.partido_jugadores
+      ?.filter(j => j.usuario && j.equipo === equipoContrario)
+      .map(j => j.usuario_id!) || [];
+    
+    const jugadoresPropio = partido.partido_jugadores
+      ?.filter(j => j.usuario && j.equipo === miEquipo)
+      .map(j => j.usuario_id!) || [];
+    
+    // Inicializar rankings
+    setRankingContrario(jugadoresContrario);
+    setRankingPropio(jugadoresPropio);
+    
+    // Verificar si ya envió su ranking
+    const { data: rankingExistente } = await supabase
+      .from('rankings')
+      .select('id')
+      .eq('partido_id', partido.id)
+      .eq('votante_id', user.id)
+      .limit(1);
+    
+    setRankingEnviado(!!rankingExistente?.length);
+    setMostrarRanking(true);
+  };
+
+  const guardarRanking = async () => {
+    if (!user || !partido) return;
+    
+    const miRegistro = partido.partido_jugadores?.find(j => j.usuario_id === user.id);
+    const miEquipo = miRegistro?.equipo;
+    
+    // Guardar ranking del equipo contrario
+    for (let i = 0; i < rankingContrario.length; i++) {
+      await supabase.from('rankings').upsert({
+        partido_id: partido.id,
+        votante_id: user.id,
+        jugador_id: rankingContrario[i],
+        tipo: 'contrario',
+        posicion: i + 1
+      }, {
+        onConflict: 'partido_id,votante_id,tipo'
+      });
+    }
+    
+    // Guardar ranking del equipo propio
+    for (let i = 0; i < rankingPropio.length; i++) {
+      await supabase.from('rankings').upsert({
+        partido_id: partido.id,
+        votante_id: user.id,
+        jugador_id: rankingPropio[i],
+        tipo: 'propio',
+        posicion: i + 1
+      }, {
+        onConflict: 'partido_id,votante_id,tipo'
+      });
+    }
+    
+    setRankingEnviado(true);
+    setMostrarRanking(false);
+    loadPartido();
+  };
+
+  const moverRanking = (
+    tipo: 'propio' | 'contrario',
+    index: number,
+    direccion: 'arriba' | 'abajo'
+  ) => {
+    const lista = tipo === 'propio' ? [...rankingPropio] : [...rankingContrario];
+    const nuevoIndex = direccion === 'arriba' ? index - 1 : index + 1;
+    
+    if (nuevoIndex < 0 || nuevoIndex >= lista.length) return;
+    
+    // Intercambiar
+    [lista[index], lista[nuevoIndex]] = [lista[nuevoIndex], lista[index]];
+    
+    if (tipo === 'propio') {
+      setRankingPropio(lista);
+    } else {
+      setRankingContrario(lista);
+    }
+  };
+
   const loadPartido = async () => {
     const { data: partidoData } = await supabase
       .from('partidos')
@@ -81,6 +180,10 @@ export default function PartidoPage() {
           *,
           votante:profiles!votos_mvp_votante_id_fkey(id, username, avatar_url, rating),
           mvp:profiles!votos_mvp_mvp_id_fkey(id, username, avatar_url, rating)
+        ),
+        rankings(
+          *,
+          jugador_rank:profiles!rankings_jugador_id_fkey(id, username, avatar_url, rating)
         )
       `)
       .eq('id', params.id)
@@ -571,6 +674,16 @@ export default function PartidoPage() {
             >
               Finalizar Partido
             </button>
+            
+            {/* Botón para hacer ranking */}
+            {partido.estado === 'jugando' && !rankingEnviado && (
+              <button
+                onClick={abrirRanking}
+                className="w-full mt-3 px-4 py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-semibold"
+              >
+                🏆 Ordenar Jugadores
+              </button>
+            )}
           </div>
         )}
 
@@ -943,6 +1056,120 @@ export default function PartidoPage() {
                   No hay jugadores en este equipo
                 </p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Ranking */}
+      {mostrarRanking && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                🏆 Ordena a los Jugadores
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                Ordena a cada jugador según su rendimiento (1 = mejor, último = peor)
+              </p>
+
+              {/* Ranking Equipo Contrario */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                  Equipo Contrario
+                </h3>
+                <div className="space-y-2">
+                  {rankingContrario.map((jugadorId, index) => {
+                    const jugador = partido?.partido_jugadores?.find(j => j.usuario_id === jugadorId)?.usuario;
+                    return (
+                      <div
+                        key={jugadorId}
+                        className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                      >
+                        <span className="w-6 h-6 flex items-center justify-center bg-yellow-500 text-white rounded-full text-sm font-bold">
+                          {index + 1}
+                        </span>
+                        <span className="flex-1 text-gray-900 dark:text-white">
+                          {jugador?.username || 'Jugador'}
+                        </span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => moverRanking('contrario', index, 'arriba')}
+                            disabled={index === 0}
+                            className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            onClick={() => moverRanking('contrario', index, 'abajo')}
+                            disabled={index === rankingContrario.length - 1}
+                            className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                          >
+                            ↓
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Ranking Equipo Propio */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                  Tu Equipo
+                </h3>
+                <div className="space-y-2">
+                  {rankingPropio.map((jugadorId, index) => {
+                    const jugador = partido?.partido_jugadores?.find(j => j.usuario_id === jugadorId)?.usuario;
+                    return (
+                      <div
+                        key={jugadorId}
+                        className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                      >
+                        <span className="w-6 h-6 flex items-center justify-center bg-green-500 text-white rounded-full text-sm font-bold">
+                          {index + 1}
+                        </span>
+                        <span className="flex-1 text-gray-900 dark:text-white">
+                          {jugador?.username || 'Jugador'}
+                        </span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => moverRanking('propio', index, 'arriba')}
+                            disabled={index === 0}
+                            className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            onClick={() => moverRanking('propio', index, 'abajo')}
+                            disabled={index === rankingPropio.length - 1}
+                            className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                          >
+                            ↓
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Botones */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setMostrarRanking(false)}
+                  className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={guardarRanking}
+                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium"
+                >
+                  Enviar Ranking
+                </button>
+              </div>
             </div>
           </div>
         </div>

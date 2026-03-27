@@ -67,6 +67,16 @@ export interface VotoMvp {
   created_at: string;
 }
 
+export interface Ranking {
+  id: string;
+  partido_id: string;
+  votante_id: string;
+  jugador_id: string;
+  tipo: 'propio' | 'contrario';
+  posicion: number;
+  created_at: string;
+}
+
 export interface EstadisticasUsuario {
   usuario_id: string;
   partidos_jugados: number;
