@@ -99,7 +99,7 @@ export default function LoginPage() {
               Correo electrónico
             </label>
             <input
-              type="email"
+              type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="correo@ejemplo.com"
