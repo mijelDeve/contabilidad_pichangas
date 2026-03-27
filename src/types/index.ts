@@ -37,6 +37,7 @@ export interface PartidoJugador {
   usuario_id: string;
   rol: 'creador' | 'invitado';
   equipo: 'a' | 'b' | null;
+  es_admin?: boolean;
   created_at: string;
 }
 

@@ -31,6 +31,7 @@ export default function PartidoPage() {
   const [equipoSeleccionado, setEquipoSeleccionado] = useState<'a' | 'b' | null>(null);
   const [minutoActual, setMinutoActual] = useState(0);
   const [equiposGenerados, setEquiposGenerados] = useState(false);
+  const [tipoGeneracion, setTipoGeneracion] = useState<'draft' | 'niveles' | null>(null);
   const [generandoEquipos, setGenerandoEquipos] = useState(false);
 
   useEffect(() => {
@@ -44,6 +45,18 @@ export default function PartidoPage() {
       loadPartido();
     }
   }, [user, params.id]);
+
+  // Función para hacer admin a un jugador
+  const hacerAdmin = async (jugadorId: string) => {
+    if (!partido || !esAdmin) return;
+    
+    await supabase
+      .from('partido_jugadores')
+      .update({ es_admin: true })
+      .eq('id', jugadorId);
+    
+    loadPartido();
+  };
 
   const loadPartido = async () => {
     const { data: partidoData } = await supabase
@@ -230,7 +243,7 @@ export default function PartidoPage() {
 
   // Función para generar equipos con Draft Alternado (balanceado por rating)
   const generarEquiposDraftAlternado = async () => {
-    if (!partido || !esCreador) return;
+    if (!partido || !esAdmin) return;
     
     setGenerandoEquipos(true);
     
@@ -268,13 +281,14 @@ export default function PartidoPage() {
     ));
 
     setEquiposGenerados(true);
+    setTipoGeneracion('draft');
     setGenerandoEquipos(false);
     loadPartido();
   };
 
   // Función para generar equipos por Niveles (top 50% vs bottom 50%)
   const generarEquiposPorNiveles = async () => {
-    if (!partido || !esCreador) return;
+    if (!partido || !esAdmin) return;
     
     setGenerandoEquipos(true);
     
@@ -331,26 +345,39 @@ export default function PartidoPage() {
     ));
 
     setEquiposGenerados(true);
+    setTipoGeneracion('niveles');
     setGenerandoEquipos(false);
     loadPartido();
   };
 
-  // Función para resetear equipos y generar de nuevo (para modo Por Niveles)
+  // Función para resetear equipos y generar de nuevo
   const resetearYRegenerarEquipos = async () => {
-    if (!partido || !esCreador) return;
+    if (!partido || !esAdmin) return;
     
-    // Primero resetear todos los jugadores sin equipo
-    const jugadoresSinEquipo = partido.partido_jugadores?.filter(j => j.usuario && !j.equipo) || [];
+    setGenerandoEquipos(true);
     
-    await Promise.all(jugadoresSinEquipo.map(j => 
+    // Resetear todos los jugadores con equipo
+    const jugadoresConEquipo = partido.partido_jugadores?.filter(j => j.usuario && j.equipo) || [];
+    
+    await Promise.all(jugadoresConEquipo.map(j => 
       supabase.from('partido_jugadores').update({ equipo: null }).eq('id', j.id)
     ));
 
-    // Luego generar nuevos equipos por niveles
-    await generarEquiposPorNiveles();
+    // Generar según el tipo seleccionado
+    if (tipoGeneracion === 'draft') {
+      await generarEquiposDraftAlternado();
+    } else {
+      await generarEquiposPorNiveles();
+    }
+    
+    setGenerandoEquipos(false);
   };
 
   const esCreador = partido?.creador_id === user?.id;
+  
+  // Verificar si el usuario es admin (creador o tiene es_admin = true)
+  const miRegistro = partido?.partido_jugadores?.find(j => j.usuario_id === user?.id);
+  const esAdmin = esCreador || miRegistro?.es_admin === true;
   const jugadoresEquipoA = partido?.partido_jugadores?.filter(j => j.usuario && j.equipo === 'a') || [];
   const jugadoresEquipoB = partido?.partido_jugadores?.filter(j => j.usuario && j.equipo === 'b') || [];
   const jugadoresSinEquipo = partido?.partido_jugadores?.filter(j => j.usuario && !j.equipo) || [];
@@ -422,7 +449,7 @@ export default function PartidoPage() {
           </p>
         </div>
 
-        {partido.estado === 'jugando' && esCreador && (
+        {partido.estado === 'jugando' && esAdmin && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-green-50 dark:bg-green-900/20 rounded-xl border-2 border-green-200 dark:border-green-800 p-6">
               <div className="flex items-center justify-between mb-4">
@@ -509,7 +536,7 @@ export default function PartidoPage() {
           </div>
         )}
 
-        {partido.estado === 'jugando' && esCreador && (
+        {partido.estado === 'jugando' && esAdmin && (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Terminar Partido</h3>
@@ -601,7 +628,7 @@ export default function PartidoPage() {
               <Users className="w-5 h-5 inline mr-2" />
               Jugadores
             </h2>
-            {esCreador && partido.estado !== 'finalizado' && (
+            {esAdmin && partido.estado !== 'finalizado' && (
               <button
                 onClick={() => setMostrarInvitacion(!mostrarInvitacion)}
                 className="flex items-center gap-2 text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300"
@@ -653,7 +680,7 @@ export default function PartidoPage() {
             </div>
           )}
 
-          {jugadoresSinEquipo.length > 1 && esCreador && (
+          {jugadoresSinEquipo.length > 1 && esAdmin && (
             <div className="mb-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
               <p className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-3">Generar Equipos Balanceados:</p>
               <div className="flex flex-wrap gap-2">
@@ -694,7 +721,7 @@ export default function PartidoPage() {
             <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
               <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-2">Sin equipo asignado:</p>
               <div className="flex flex-wrap gap-2">
-                {esCreador ? (
+                {esAdmin ? (
                   jugadoresSinEquipo.map(j => (
                     <div key={j.id} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-yellow-300 dark:border-yellow-700 rounded-lg p-2">
                       <span className="text-gray-900 dark:text-white text-sm">{j.usuario?.username}</span>
@@ -751,7 +778,18 @@ export default function PartidoPage() {
                         {j.rol === 'creador' && (
                           <span className="text-xs bg-green-200 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded">Creador</span>
                         )}
-                        {esCreador && j.rol !== 'creador' && (
+                        {j.es_admin && j.rol !== 'creador' && (
+                          <span className="text-xs bg-purple-200 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-2 py-1 rounded">Admin</span>
+                        )}
+                        {esAdmin && j.rol !== 'creador' && !j.es_admin && (
+                          <button
+                            onClick={() => hacerAdmin(j.id)}
+                            className="text-xs text-purple-600 dark:text-purple-400 hover:underline"
+                          >
+                            Hacer Admin
+                          </button>
+                        )}
+                        {esAdmin && j.rol !== 'creador' && (
                           <button
                             onClick={async () => {
                               await supabase.from('partido_jugadores').update({ equipo: null }).eq('id', j.id);
@@ -789,7 +827,18 @@ export default function PartidoPage() {
                         {j.rol === 'creador' && (
                           <span className="text-xs bg-blue-200 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-1 rounded">Creador</span>
                         )}
-                        {esCreador && j.rol !== 'creador' && (
+                        {j.es_admin && j.rol !== 'creador' && (
+                          <span className="text-xs bg-purple-200 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-2 py-1 rounded">Admin</span>
+                        )}
+                        {esAdmin && j.rol !== 'creador' && !j.es_admin && (
+                          <button
+                            onClick={() => hacerAdmin(j.id)}
+                            className="text-xs text-purple-600 dark:text-purple-400 hover:underline"
+                          >
+                            Hacer Admin
+                          </button>
+                        )}
+                        {esAdmin && j.rol !== 'creador' && (
                           <button
                             onClick={async () => {
                               await supabase.from('partido_jugadores').update({ equipo: null }).eq('id', j.id);
@@ -823,7 +872,7 @@ export default function PartidoPage() {
           </div>
         )}
 
-        {esCreador && partido.estado === 'pendiente' && (
+        {esAdmin && partido.estado === 'pendiente' && (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
             <button
               onClick={iniciarPartido}
