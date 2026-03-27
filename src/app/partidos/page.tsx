@@ -38,19 +38,30 @@ export default function PartidosPage() {
   }, [user, authLoading]);
 
   const loadPartidos = async () => {
+    if (!user) return;
+    
     setLoadingData(true);
     
-    // Obtener mis partidos (donde soy creador o estoy invitado/aceptado)
+    // Obtener mis partidos donde soy jugador
     const { data: misJugadorPartidos } = await supabase
       .from('partido_jugadores')
       .select('partido_id')
-      .eq('usuario_id', user?.id);
+      .eq('usuario_id', user.id);
 
     const misPartidoIds = misJugadorPartidos?.map((m: { partido_id: string }) => m.partido_id) || [];
-    if (user) {
-      misPartidoIds.push(user.id); // Para partidos que creé
-    }
+    
+    // Obtener partidos donde soy creador
+    const { data: partidosDondeSoyCreador } = await supabase
+      .from('partidos')
+      .select('id')
+      .eq('creador_id', user.id);
+    
+    const idsCreador = partidosDondeSoyCreador?.map((p: { id: string }) => p.id) || [];
+    
+    // Combinar IDs (sin duplicados)
+    const todosMisIds = [...new Set([...misPartidoIds, ...idsCreador])];
 
+    // Obtener mis partidos
     const { data: misPartidosData } = await supabase
       .from('partidos')
       .select(`
@@ -62,7 +73,7 @@ export default function PartidosPage() {
           equipo
         )
       `)
-      .in('id', misPartidoIds.length > 0 ? misPartidoIds : ['none'])
+      .in('id', todosMisIds.length > 0 ? todosMisIds : ['none'])
       .order('fecha', { ascending: true });
 
     if (misPartidosData) {
@@ -88,10 +99,11 @@ export default function PartidosPage() {
       .in('estado', ['pendiente', 'confirmado'])
       .order('fecha', { ascending: true });
 
-    if (disponiblesData && user) {
+    if (disponiblesData) {
       const disponibles = disponiblesData.filter((p: any) => {
         const esCreador = p.creador_id === user.id;
-        const yaUnido = p.partido_jugadores?.some((j: any) => j.usuario_id === user.id && j.equipo);
+        // Verificar si ya está unido (sin importar el equipo, puede ser null)
+        const yaUnido = p.partido_jugadores?.some((j: any) => j.usuario_id === user.id);
         return !esCreador && !yaUnido;
       }).map((p: any) => ({
         ...p,
