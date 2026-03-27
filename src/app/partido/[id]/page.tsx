@@ -247,9 +247,9 @@ export default function PartidoPage() {
     
     setGenerandoEquipos(true);
     
-    // Obtener jugadores sin equipo con sus ratings
-    const jugadoresSinEquipoConRating = partido.partido_jugadores
-      ?.filter(j => j.usuario && !j.equipo && j.usuario.rating)
+    // Obtener TODOS los jugadores del partido (incluyendo los que ya tienen equipo)
+    const todosJugadores = partido.partido_jugadores
+      ?.filter(j => j.usuario && j.usuario.rating)
       .map(j => ({
         id: j.id,
         usuarioId: j.usuario_id!,
@@ -257,13 +257,13 @@ export default function PartidoPage() {
         rating: j.usuario!.rating || 50
       })) || [];
 
-    if (jugadoresSinEquipoConRating.length < 2) {
+    if (todosJugadores.length < 2) {
       setGenerandoEquipos(false);
       return;
     }
 
     // Ordenar por rating (mayor a menor)
-    const ordenados = [...jugadoresSinEquipoConRating].sort((a, b) => b.rating - a.rating);
+    const ordenados = [...todosJugadores].sort((a, b) => b.rating - a.rating);
 
     // Asignar alternadamente: A, B, B, A, A, B...
     const updates: { id: string; equipo: 'a' | 'b' }[] = [];
@@ -691,7 +691,7 @@ export default function PartidoPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-lg font-medium text-sm"
                 >
                   <Shuffle className="w-4 h-4" />
-                  Draft Alternado
+                  {jugadoresEquipoA.length > 0 || jugadoresEquipoB.length > 0 ? 'Regenerar Draft' : 'Draft Alternado'}
                 </button>
                 <button
                   onClick={generarEquiposPorNiveles}
@@ -701,16 +701,6 @@ export default function PartidoPage() {
                   <Users className="w-4 h-4" />
                   Por Niveles
                 </button>
-                {((jugadoresEquipoA.length > 0 || jugadoresEquipoB.length > 0) && esAdmin) && (
-                  <button
-                    onClick={resetearYRegenerarEquipos}
-                    disabled={generandoEquipos}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium text-sm"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    Regenerar
-                  </button>
-                )}
               </div>
               {generandoEquipos && (
                 <p className="text-xs text-purple-600 dark:text-purple-400 mt-2">Generando equipos...</p>
