@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Partido, Invitacion, Profile } from '@/types';
-import { Plus, Calendar, Users, LogOut, Trophy, Clock, User } from 'lucide-react';
+import { Plus, Calendar, Users, LogOut, Trophy, Clock, User, Search } from 'lucide-react';
 
 interface PartidoWithCreador extends Partido {
   creador_username?: string;
@@ -209,13 +209,20 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <button
             onClick={() => router.push('/partido/nuevo')}
             className="flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 text-white font-semibold py-4 px-6 rounded-xl transition-colors"
           >
             <Plus className="w-6 h-6" />
             Crear Pichanga
+          </button>
+          <button
+            onClick={() => router.push('/partidos')}
+            className="flex items-center justify-center gap-3 bg-white dark:bg-gray-800 border-2 border-blue-400 dark:border-blue-500 hover:border-blue-500 text-gray-700 dark:text-gray-200 font-semibold py-4 px-6 rounded-xl transition-colors"
+          >
+            <Search className="w-6 h-6 text-blue-500" />
+            Buscar Partidos
           </button>
           <button
             onClick={() => router.push('/ranking')}
