@@ -681,7 +681,7 @@ export default function PartidoPage() {
             </div>
           )}
 
-          {jugadoresSinEquipo.length > 1 && esAdmin && (
+          {(jugadoresSinEquipo.length > 1 || (jugadoresEquipoA.length > 0 || jugadoresEquipoB.length > 0)) && esAdmin && (
             <div className="mb-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
               <p className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-3">Generar Equipos Balanceados:</p>
               <div className="flex flex-wrap gap-2">
