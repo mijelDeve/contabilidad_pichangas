@@ -34,6 +34,10 @@ export default function PartidoPage() {
   const [equiposGenerados, setEquiposGenerados] = useState(false);
   const [tipoGeneracion, setTipoGeneracion] = useState<'draft' | 'niveles' | null>(null);
   const [generandoEquipos, setGenerandoEquipos] = useState(false);
+  const [iniciando, setIniciando] = useState(false);
+  const [registrandoGol, setRegistrandoGol] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [errorGol, setErrorGol] = useState<string | null>(null);
   
   // Estados para ranking
   const [mostrarRanking, setMostrarRanking] = useState(false);
@@ -235,29 +239,60 @@ export default function PartidoPage() {
   };
 
   const iniciarPartido = async () => {
-    if (!partido) return;
-    await supabase
-      .from('partidos')
-      .update({ estado: 'jugando' })
-      .eq('id', partido.id);
-    loadPartido();
+    if (!partido || !supabase) return;
+    
+    setIniciando(true);
+    setError(null);
+    try {
+      const { error: err } = await supabase
+        .from('partidos')
+        .update({ estado: 'jugando' })
+        .eq('id', partido.id);
+      
+      if (err) {
+        console.error('Error al iniciar partido:', err);
+        setError('No se pudo iniciar el partido. Verifica que tengas permisos.');
+      } else {
+        loadPartido();
+      }
+    } catch (err) {
+      console.error('Error al iniciar partido:', err);
+      setError('Error al iniciar el partido');
+    } finally {
+      setIniciando(false);
+    }
   };
 
   const registrarGol = async (jugadorId: string, equipo: 'a' | 'b') => {
-    if (!partido) return;
+    if (!partido || !supabase) return;
     
-    const nuevoMinuto = minutoActual + 1;
+    setRegistrandoGol(true);
+    setErrorGol(null);
     
-    await supabase.from('goles').insert({
-      partido_id: partido.id,
-      jugador_id: jugadorId,
-      equipo: equipo,
-      minuto: nuevoMinuto
-    });
-    
-    setMinutoActual(nuevoMinuto);
-    setEquipoSeleccionado(null);
-    loadPartido();
+    try {
+      const nuevoMinuto = minutoActual + 1;
+      
+      const { error: err } = await supabase.from('goles').insert({
+        partido_id: partido.id,
+        jugador_id: jugadorId,
+        equipo: equipo,
+        minuto: nuevoMinuto
+      });
+      
+      if (err) {
+        console.error('Error al registrar gol:', err);
+        setErrorGol('No se pudo registrar el gol. Verifica que tengas permisos.');
+      } else {
+        setMinutoActual(nuevoMinuto);
+        setEquipoSeleccionado(null);
+        loadPartido();
+      }
+    } catch (err) {
+      console.error('Error al registrar gol:', err);
+      setErrorGol('Error al registrar el gol');
+    } finally {
+      setRegistrandoGol(false);
+    }
   };
 
   const registrarResultado = async (equipoA: number, equipoB: number) => {
@@ -294,11 +329,11 @@ export default function PartidoPage() {
         if (gano) nuevoRating += 2;
         else if (!empato) nuevoRating -= 1;
         
+        const misGoles = partido.goles?.filter(g => g.jugador_id === jugador.usuario_id).length || 0;
+        nuevoRating += misGoles;
+        
         const mvpDelPartido = partido.mvp_id === jugador.usuario_id;
         if (mvpDelPartido) nuevoRating += 3;
-        
-        const misGoles = partido.goles?.filter(g => g.jugador_id === jugador.usuario_id).length || 0;
-        nuevoRating += misGoles * 0.5;
         
         nuevoRating = Math.max(40, Math.min(99, nuevoRating));
         
@@ -620,9 +655,9 @@ export default function PartidoPage() {
           </div>
         )}
 
-        {partido.estado === 'jugando' && !esCreador && (
+        {partido.estado === 'jugando' && !esAdmin && (
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 text-center">
-            <p className="text-yellow-800 dark:text-yellow-200">Solo el creador del partido puede registrar goles</p>
+            <p className="text-yellow-800 dark:text-yellow-200">Solo el creador o admins del partido pueden registrar goles</p>
           </div>
         )}
 
@@ -1001,11 +1036,24 @@ export default function PartidoPage() {
 
         {esAdmin && partido.estado === 'pendiente' && (
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+              {error && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                {error}
+              </div>
+            )}
             <button
               onClick={iniciarPartido}
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+              disabled={iniciando}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
             >
-              Iniciar Partido
+              {iniciando ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                  Iniciando...
+                </>
+              ) : (
+                'Iniciar Partido'
+              )}
             </button>
           </div>
         )}
@@ -1019,12 +1067,17 @@ export default function PartidoPage() {
                 ¿Quién marcó el gol?
               </h3>
               <button
-                onClick={() => setEquipoSeleccionado(null)}
+                onClick={() => { setEquipoSeleccionado(null); setErrorGol(null); }}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+            {errorGol && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                {errorGol}
+              </div>
+            )}
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
               Minuto: {minutoActual + 1}'
             </p>
@@ -1034,7 +1087,8 @@ export default function PartidoPage() {
                   <button
                     key={j.id}
                     onClick={() => registrarGol(j.usuario_id!, equipoSeleccionado)}
-                    className="w-full flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                    disabled={registrandoGol}
+                    className="w-full flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 hover:bg-green-50 dark:hover:bg-green-900/20 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
                   >
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                       equipoSeleccionado === 'a' ? 'bg-green-200 dark:bg-green-800' : 'bg-blue-200 dark:bg-blue-800'
@@ -1046,9 +1100,13 @@ export default function PartidoPage() {
                       </span>
                     </div>
                     <span className="text-gray-900 dark:text-white font-medium">{j.usuario?.username}</span>
-                    <Check className={`ml-auto w-5 h-5 ${
-                      equipoSeleccionado === 'a' ? 'text-green-600' : 'text-blue-600'
-                    }`} />
+                    {registrandoGol ? (
+                      <div className="ml-auto animate-spin rounded-full h-5 w-5 border-2 border-green-600 border-t-transparent"></div>
+                    ) : (
+                      <Check className={`ml-auto w-5 h-5 ${
+                        equipoSeleccionado === 'a' ? 'text-green-600' : 'text-blue-600'
+                      }`} />
+                    )}
                   </button>
                 ))
               ) : (

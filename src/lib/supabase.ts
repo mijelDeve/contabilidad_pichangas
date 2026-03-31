@@ -10,8 +10,7 @@ export function createClient() {
 
   if (!supabaseUrl || supabaseUrl === 'your-supabase-url' || !supabaseAnonKey) {
     console.warn('Supabase not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local');
-    client = createBrowserClient('https://placeholder.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder');
-    return client;
+    return null;
   }
 
   client = createBrowserClient(supabaseUrl, supabaseAnonKey);
